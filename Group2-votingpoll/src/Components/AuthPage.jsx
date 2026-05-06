@@ -10,6 +10,8 @@ import {
   githubProvider,
   googleProvider,
   hasFirebaseConfig,
+  registerLocalUser,
+  signInLocalUser,
   twitterProvider,
 } from "../firebase";
 
@@ -72,7 +74,13 @@ function AuthPage() {
     setIsSubmitting(true);
 
     try {
-      if (isRegistering) {
+      if (!hasFirebaseConfig) {
+        if (isRegistering) {
+          registerLocalUser(email, password);
+        } else {
+          signInLocalUser(email, password);
+        }
+      } else if (isRegistering) {
         await createUserWithEmailAndPassword(auth, email, password);
       } else {
         await signInWithEmailAndPassword(auth, email, password);
@@ -99,22 +107,6 @@ function AuthPage() {
     }
   };
 
-  if (!hasFirebaseConfig) {
-    return (
-      <main className="mx-auto flex min-h-svh w-full max-w-lg items-center p-4">
-        <section className="w-full rounded-lg border border-red-400/40 bg-red-950/30 p-5 text-left">
-          <h1 className="mb-3 text-2xl font-bold text-white">
-            Firebase setup needed
-          </h1>
-          <p className="text-sm text-red-100">
-            Add your Firebase web app values to a local <code>.env</code> file
-            before users can sign in.
-          </p>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-lg items-center p-4">
       <section className="w-full rounded-lg border border-slate-700 bg-slate-950 p-5 text-left shadow-xl">
@@ -130,101 +122,120 @@ function AuthPage() {
           </p>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-900 p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signin");
-              setError("");
-            }}
-            className={`rounded-md py-2 text-sm font-semibold transition ${
-              !isRegistering
-                ? "bg-blue-500 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("register");
-              setError("");
-            }}
-            className={`rounded-md py-2 text-sm font-semibold transition ${
-              isRegistering
-                ? "bg-blue-500 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Register
-          </button>
-        </div>
-
-        <form onSubmit={handleEmailAuth} className="space-y-3">
-          <label className="block text-sm font-medium text-slate-300">
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3 text-white placeholder:text-slate-500 focus:border-blue-400 focus:outline-none"
-              placeholder="you@example.com"
-            />
-          </label>
-
-          <label className="block text-sm font-medium text-slate-300">
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              minLength={6}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3 text-white placeholder:text-slate-500 focus:border-blue-400 focus:outline-none"
-              placeholder="At least 6 characters"
-            />
-          </label>
-
-          {error && (
-            <p className="rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-100">
-              {error}
+        {!hasFirebaseConfig && (
+          <section className="mb-5 rounded-lg border border-red-400/40 bg-red-950/30 p-4 text-left">
+            <h2 className="text-base font-semibold text-white">
+              Firebase setup needed
+            </h2>
+            <p className="mt-2 text-sm text-red-100">
+              Add your Firebase web app values to a local{" "}
+              <code className="mx-1 rounded bg-black/20 px-1">.env</code>
+              file before users can sign in.
             </p>
-          )}
+            <p className="mt-2 text-sm text-red-100">
+              Local register and sign-in are enabled for testing until Firebase
+              is configured.
+            </p>
+          </section>
+        )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-950 transition hover:bg-green-400 disabled:cursor-wait disabled:bg-slate-600 disabled:text-slate-300"
-          >
-            {isSubmitting
-              ? "Checking credentials..."
-              : isRegistering
-              ? "Create account"
-              : "Sign in to vote"}
-          </button>
-        </form>
-
-        <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-          <span className="h-px flex-1 bg-slate-800" />
-          or
-          <span className="h-px flex-1 bg-slate-800" />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          {providerButtons.map((button) => (
+        <>
+          <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-900 p-1">
             <button
-              key={button.label}
               type="button"
-              onClick={() => handleSocialAuth(button.provider)}
-              disabled={isSubmitting}
-              className={`rounded-lg px-3 py-3 text-sm font-semibold transition disabled:cursor-wait disabled:opacity-60 ${button.className}`}
+              onClick={() => {
+                setMode("signin");
+                setError("");
+              }}
+              className={`rounded-md py-2 text-sm font-semibold transition ${
+                !isRegistering
+                  ? "bg-blue-500 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
             >
-              {button.label}
+              Sign in
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("register");
+                setError("");
+              }}
+              className={`rounded-md py-2 text-sm font-semibold transition ${
+                isRegistering
+                  ? "bg-blue-500 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Register
+            </button>
+          </div>
+
+          <form onSubmit={handleEmailAuth} className="space-y-3">
+            <label className="block text-sm font-medium text-slate-300">
+              Email
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3 text-white placeholder:text-slate-500 focus:border-blue-400 focus:outline-none"
+                placeholder="you@example.com"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-300">
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                minLength={6}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3 text-white placeholder:text-slate-500 focus:border-blue-400 focus:outline-none"
+                placeholder="At least 6 characters"
+              />
+            </label>
+
+            {error && (
+              <p className="rounded-lg border border-red-400/40 bg-red-950/30 p-3 text-sm text-red-100">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-950 transition hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+            >
+              {isSubmitting
+                ? "Checking credentials..."
+                : isRegistering
+                ? "Create account"
+                : "Sign in to vote"}
+            </button>
+          </form>
+
+          <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+            <span className="h-px flex-1 bg-slate-800" />
+            or
+            <span className="h-px flex-1 bg-slate-800" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {providerButtons.map((button) => (
+              <button
+                key={button.label}
+                type="button"
+                onClick={() => handleSocialAuth(button.provider)}
+                disabled={isSubmitting || !hasFirebaseConfig}
+                className={`rounded-lg px-3 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${button.className}`}
+              >
+                {button.label}
+              </button>
+            ))}
+          </div>
+        </>
       </section>
     </main>
   );

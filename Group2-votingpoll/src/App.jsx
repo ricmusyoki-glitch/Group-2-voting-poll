@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import AuthPage from "./Component/AuthPage";
-import PollForm from "./Component/PollForm";
-import PollList from "./Component/PollList";
-import { auth } from "./firebase";
+import AuthPage from "./Components/AuthPage";
+import PollForm from "./Components/PollForm";
+import PollList from "./Components/PollList";
+import {
+  auth,
+  getLocalSessionUser,
+  LOCAL_AUTH_EVENT,
+  signOutLocalUser,
+} from "./firebase";
+
+const POLL_OPTIONS_KEY = "pollOptions";
+const POLL_EVENT = "poll-options-change";
 
 const defaultOptions = [
   { id: 1, text: "Immanuel Okoth", votes: 0 },
@@ -14,11 +22,15 @@ const defaultOptions = [
 
 const readSavedOptions = () => {
   try {
-    const saved = JSON.parse(localStorage.getItem("pollOptions"));
+    const saved = JSON.parse(localStorage.getItem(POLL_OPTIONS_KEY));
     return Array.isArray(saved) && saved.length > 0 ? saved : defaultOptions;
   } catch {
     return defaultOptions;
   }
+};
+
+const notifyPollChange = () => {
+  window.dispatchEvent(new Event(POLL_EVENT));
 };
 
 const getVotedKey = (userId) => `hasVoted:${userId}`;
@@ -78,7 +90,8 @@ function PollApp({ user }) {
   const normalize = (text) => text.trim().toLowerCase().replace(/\s+/g, " ");
 
   useEffect(() => {
-    localStorage.setItem("pollOptions", JSON.stringify(options));
+    localStorage.setItem(POLL_OPTIONS_KEY, JSON.stringify(options));
+    notifyPollChange();
   }, [options]);
 
   useEffect(() => {
@@ -86,6 +99,32 @@ function PollApp({ user }) {
       localStorage.setItem(getVotedKey(user.uid), JSON.stringify(hasVoted));
     }
   }, [hasVoted, user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const syncPollState = () => {
+      const nextOptions = readSavedOptions();
+      const nextHasVoted = readHasVoted(user.uid);
+
+      setOptions((currentOptions) =>
+        JSON.stringify(currentOptions) === JSON.stringify(nextOptions)
+          ? currentOptions
+          : nextOptions
+      );
+      setHasVoted((currentHasVoted) =>
+        currentHasVoted === nextHasVoted ? currentHasVoted : nextHasVoted
+      );
+    };
+
+    window.addEventListener(POLL_EVENT, syncPollState);
+    window.addEventListener("storage", syncPollState);
+
+    return () => {
+      window.removeEventListener(POLL_EVENT, syncPollState);
+      window.removeEventListener("storage", syncPollState);
+    };
+  }, [user]);
 
   const addOption = (text) => {
     const normalizedInput = normalize(text);
@@ -128,17 +167,27 @@ function PollApp({ user }) {
     if (!window.confirm("Reset poll to default options?")) return;
     setOptions(defaultOptions);
     setHasVoted(false);
-    localStorage.removeItem("pollOptions");
+    localStorage.removeItem(POLL_OPTIONS_KEY);
   };
 
   const clearOptions = () => {
     if (!window.confirm("Clear all options and start fresh?")) return;
     setOptions([]);
     setHasVoted(false);
-    localStorage.removeItem("pollOptions");
+    localStorage.removeItem(POLL_OPTIONS_KEY);
   };
 
   const totalVotes = options.reduce((sum, opt) => sum + opt.votes, 0);
+  const signedInLabel = user.displayName || user.email || "Verified voter";
+  const handleSignOut = () => {
+    if (!auth) {
+      signOutLocalUser();
+      window.location.assign(`${import.meta.env.BASE_URL}auth`);
+      return;
+    }
+
+    signOut(auth);
+  };
 
   return (
     <main className="mx-auto max-w-md space-y-6 p-4">
@@ -147,11 +196,11 @@ function PollApp({ user }) {
         <p className="text-sm text-slate-400">Signed in as</p>
         <div className="mt-1 flex items-center justify-between gap-3">
           <p className="min-w-0 truncate font-semibold text-white">
-            {user.displayName || user.email || "Verified voter"}
+            {signedInLabel}
           </p>
           <button
             type="button"
-            onClick={() => signOut(auth)}
+            onClick={handleSignOut}
             className="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-400 hover:text-white"
           >
             Sign out
@@ -196,14 +245,27 @@ function App() {
 
   useEffect(() => {
     if (!auth) {
-      return undefined;
+      setUser(getLocalSessionUser());
+      setIsAuthLoading(false);
+
+      const syncLocalAuth = () => {
+        setUser(getLocalSessionUser());
+      };
+
+      window.addEventListener(LOCAL_AUTH_EVENT, syncLocalAuth);
+      window.addEventListener("storage", syncLocalAuth);
+
+      return () => {
+        window.removeEventListener(LOCAL_AUTH_EVENT, syncLocalAuth);
+        window.removeEventListener("storage", syncLocalAuth);
+      };
     }
-    
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthLoading(false);
     });
-    
+
     return () => unsubscribe();
   }, []);
 
